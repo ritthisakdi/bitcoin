@@ -126,6 +126,13 @@ UniValue getnewaddress(const UniValue& params, bool fHelp)
 
     pwalletMain->SetAddressBook(keyID, strAccount, "receive");
 
+    if (GetBoolArg("-usehd", true))
+    {
+        UniValue result(UniValue::VOBJ);
+        result.pushKV("address", CBitcoinAddress(keyID).ToString());
+        result.pushKV("keypath", pwalletMain->mapKeyMetadata[keyID].keypath);
+        return result;
+    }
     return CBitcoinAddress(keyID).ToString();
 }
 

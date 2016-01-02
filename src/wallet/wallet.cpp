@@ -80,9 +80,25 @@ CPubKey CWallet::GenerateNewKey()
 {
     AssertLockHeld(cs_wallet); // mapKeyMetadata
     bool fCompressed = CanSupportFeature(FEATURE_COMPRPUBKEY); // default to compressed public keys if we want 0.6.0 wallets
-
     CKey secret;
-    secret.MakeNewKey(fCompressed);
+
+    // Create new metadata
+    int64_t nCreationTime = GetTime();
+    CKeyMetadata metadata(nCreationTime);
+
+    // check if there is an active HD chain
+    HDChainID activeHDChainID;
+    bool validHDChain = GetActiveHDChainID(activeHDChainID);
+    if (validHDChain)
+    {
+        // hd derive key
+        std::string keypath;
+        DeriveKeyAtIndex(activeHDChainID, secret, keypath, GetNextChildIndex(activeHDChainID, false), false);
+        metadata.keypath = keypath;
+        metadata.chainID = activeHDChainID;
+    }
+    else
+        secret.MakeNewKey(fCompressed);
 
     // Compressed public keys were introduced in version 0.6.0
     if (fCompressed)
@@ -91,12 +107,10 @@ CPubKey CWallet::GenerateNewKey()
     CPubKey pubkey = secret.GetPubKey();
     assert(secret.VerifyPubKey(pubkey));
 
-    // Create new metadata
-    int64_t nCreationTime = GetTime();
-    mapKeyMetadata[pubkey.GetID()] = CKeyMetadata(nCreationTime);
+    //mem store metadata, time of first key (wallet birthday)
+    mapKeyMetadata[pubkey.GetID()] = metadata;
     if (!nTimeFirstKey || nCreationTime < nTimeFirstKey)
         nTimeFirstKey = nCreationTime;
-
     if (!AddKeyPubKey(secret, pubkey))
         throw std::runtime_error("CWallet::GenerateNewKey(): AddKey failed");
     return pubkey;
@@ -952,6 +966,37 @@ CAmount CWallet::GetChange(const CTransaction& tx) const
             throw std::runtime_error("CWallet::GetChange(): value out of range");
     }
     return nChange;
+}
+
+bool CWallet::AddHDChain(const CHDChain& chain, bool memonly)
+{
+    LOCK(cs_wallet);
+    CHDKeyStore::AddHDChain(chain);
+    if (!memonly && !CWalletDB(strWalletFile).WriteHDChain(chain))
+        throw runtime_error("AddHDChain(): writing chain failed");
+    return true;
+}
+
+bool CWallet::SetActiveHDChainID(const HDChainID& chainID, bool check, bool memonly)
+{
+    LOCK(cs_wallet);
+
+    CHDChain chainOut;
+    if (check && !GetChain(chainID, chainOut))
+        return false;
+
+    activeHDChain = chainID;
+    if (!memonly && !CWalletDB(strWalletFile).WriteHDAchiveChain(chainID))
+        throw runtime_error("SetActiveHDChainID(): writing active chainid failed");
+
+    return true;
+}
+
+bool CWallet::GetActiveHDChainID(HDChainID& chainID)
+{
+    LOCK(cs_wallet);
+    chainID = activeHDChain;
+    return true;
 }
 
 int64_t CWalletTx::GetTxTime() const

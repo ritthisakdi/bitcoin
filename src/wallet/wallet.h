@@ -509,6 +509,9 @@ public:
     MasterKeyMap mapMasterKeys;
     unsigned int nMasterKeyMaxID;
 
+    //! current active hd chain
+    HDChainID activeHDChain;
+
     CWallet()
     {
         SetNull();
@@ -783,6 +786,12 @@ public:
     bool GetBroadcastTransactions() const { return fBroadcastTransactions; }
     /** Set whether this wallet broadcasts transactions. */
     void SetBroadcastTransactions(bool broadcast) { fBroadcastTransactions = broadcast; }
+
+    /** HD functions */
+    //! Adds a new HD keychain
+    bool AddHDChain(const CHDChain& chain, bool memonly = false);
+    bool SetActiveHDChainID(const HDChainID& chainID, bool check = true, bool memonly = false);
+    bool GetActiveHDChainID(HDChainID& chainID);
 };
 
 /** A key allocated from the key pool. */
